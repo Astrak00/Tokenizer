@@ -1,0 +1,89 @@
+name: Deploy
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-upload:
+    name: Build and upload
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+    
+          - build: macos-x86
+            os: macos-latest
+            target: x86_64-apple-darwin
+    
+          - build: windows-x86
+            os: windows-latest
+            target: x86_64-pc-windows-gnu
+    
+          - build: linux-arm
+            os: ubuntu-latest
+            target: aarch64-linux-gnu
+    
+          - build: macos-arm
+            os: macos-latest
+            target: aarch64-apple-darwin
+
+          - build: windows-arm
+            os: windows-latest
+            target: aarch64-pc-windows-gnu
+
+    steps:
+    - name: Clone repository
+      uses: actions/checkout@v3
+  
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --verbose --release --target ${{ matrix.target }}
+
+    - name: Build archive
+      shell: bash
+      run: |
+        binary_name="tokenizer" # Replace with the name of your binary
+        
+        dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+        mkdir "$dirname"
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+        else
+          mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+        fi
+
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          7z a "$dirname.zip" "$dirname"
+          echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+        else
+          tar -czf "$dirname.tar.gz" "$dirname"
+          echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+        fi
+    - name: Upload the binaries
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ env.ASSET }}
+
+    
