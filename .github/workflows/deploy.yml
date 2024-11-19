@@ -60,6 +60,11 @@ jobs:
         command: build
         args: --verbose --release --target ${{ matrix.target }}
 
+    - name: Get version
+      run: |
+        version=$(grep '^version' Cargo.toml | head -1 | awk '{print $3}' | tr -d '"')
+        echo "VERSION=$version" >> $GITHUB_ENV
+
     - name: Build archive
       shell: bash
       run: |
@@ -80,10 +85,15 @@ jobs:
           tar -czf "$dirname.tar.gz" "$dirname"
           echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
         fi
+
+    - name: Install 7z on Windows
+      if: runner.os == 'Windows'
+      run: choco install 7zip
+
     - name: Upload the binaries
       uses: softprops/action-gh-release@v1
       with:
         files: |
           ${{ env.ASSET }}
-
-    
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
